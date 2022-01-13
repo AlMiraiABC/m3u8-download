@@ -1,7 +1,9 @@
 import asyncio
+import os
 import sys
 from getopt import GetoptError, getopt
 
+from conf import ACCOUNT, CATEGORY, COOKIES
 from playlist import PlayList
 
 URL = "http://www--vipexam--cn--http.vipexam.hevttc.utuweb.utuedu.com:8089/web/videoPlay"
@@ -14,13 +16,40 @@ def start(account: str, category: str, cookies: str):
     asyncio.run(pl.download())
 
 
+def check_args(*args: str):
+    errinfo = '''
+    ACCOUNT, COOKIES and CATEGORY have to be set.
+    1. set from conf.py
+    2. set from env
+    3. set from args(see more 'main.py -h')
+    args > env > conf.py
+    '''
+    for arg in args:
+        if arg is not None and arg.strip():
+            continue
+        else:
+            raise ValueError(errinfo)
+
+
 if __name__ == '__main__':
     try:
-        opts, args = getopt(sys.argv[1:], "ha:c:x:", [
-                            "help", "account=", "cookies=", "category="])
+        opts, args = getopt(sys.argv[1:], "haxc",
+                            ["help", "account", "cookies", "category"])
     except GetoptError as err:
         print(err)
         sys.exit(2)
+    # conf
+    account = ACCOUNT
+    cookies = COOKIES
+    category = CATEGORY
+    # env
+    if os.environ('ACCOUNT'):
+        account = os.environ('ACCOUNT')
+    if os.environ('COOKIES'):
+        cookies = os.environ('COOKIES')
+    if os.environ('CATEGORY'):
+        category = os.environ('CATEGORY')
+    # arg
     for opt, arg in opts:
         if opt in ['-h', '--help']:
             print('-a --account\taccount when loged in')
@@ -33,4 +62,5 @@ if __name__ == '__main__':
             cookies = arg
         elif opt in ('-c', '--category'):
             category = arg
-    start(account, category, cookies)
+    check_args(account, category, cookies)
+    start(account.strip(), category.strip(), cookies.strip())

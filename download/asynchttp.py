@@ -1,7 +1,7 @@
 import asyncio
 import traceback
 from asyncio import Semaphore
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, Tuple, Union
 
 import aiofiles
 import aiohttp
