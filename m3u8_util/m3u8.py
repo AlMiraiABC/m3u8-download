@@ -37,7 +37,7 @@ class M3U8:
         fns = [f'{os.path.join(self.tmp_dir,seg)}' for seg in playlist.files]
         await self.asynchttp.async_downloads(4, urls, fns)
 
-    def combine_segs(self, output: str):
+    def combine_segs(self, output: str)->str:
         """
         combine m3u8 segment videos from :param:`segs_folder` to :param:`output`
         """
@@ -49,7 +49,7 @@ class M3U8:
         d = os.path.dirname(output)
         o = os.path.join(d,f[:200-len(e)-1],e)
         self.logger.info(f"Save as {o} from {output}")
-        with open(output[:60], 'wb') as video:
+        with open(o, 'wb') as video:
             with tqdm(playlist.files) as bar:
                 for seg in bar:
                     bar.set_description(f"Combining {seg}")
@@ -58,9 +58,10 @@ class M3U8:
                         content = temp.read()
                         video.write(content)
                     os.remove(segpath)
+        return o
 
     @staticmethod
     async def download(m3u8_filename: str, base_url: str, output: str,  tmp_dir: str = 'tmp', *args, **kwargs):
         md = M3U8(m3u8_filename, tmp_dir, *args, **kwargs)
         await md.download_segs(base_url)
-        md.combine_segs(output)
+        return md.combine_segs(output)

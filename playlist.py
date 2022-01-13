@@ -111,8 +111,8 @@ class PlayList:
                 m3u8_filepath = os.path.join('./m3u8', m3u8_filename)
                 save_filepath = os.path.join(save, f'{video_name}.ts')
                 self.logger_success.info(f'start download {video_name}')
-                await M3U8.download(m3u8_filepath, base_url, save_filepath, *args, **kwargs)
-                size = os.path.getsize(save_filepath)
+                o = await M3U8.download(m3u8_filepath, base_url, save_filepath, *args, **kwargs)
+                size = os.path.getsize(o)
                 self.logger_success.info(f'{video_name}, {human_size(size)}')
                 shutil.move(m3u8_filepath, os.path.join(
                     self.downloaded_dir, m3u8_filename))
