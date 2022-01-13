@@ -23,7 +23,7 @@ class AsyncHTTP:
         self.logger_error = CFLogger(
             'error', '%(asctime)s:%(message)s', log_dir=log_dir).logger
 
-    async def async_download(self, index: int, semaphore: Semaphore, url: str, file_name: str, headers: Dict[str, str] = None, proxy: str = None):
+    async def async_download(self, index: int, semaphore: Semaphore, url: str, file_name: str, headers: Dict[str, str] = None, proxy: str = None, chunk_size: int = 1024*1024, pb: bool = True):
         async with semaphore:
             async with aiohttp.ClientSession(timeout=ClientTimeout(0)) as client:
                 try:
@@ -33,11 +33,13 @@ class AsyncHTTP:
                         length = int(response.headers.get(
                             'Content-Length', '0'))
                         async with aiofiles.open(file_name, 'wb') as f:
-                            with tqdm(total=length) as bar:
-                                # 1M
-                                async for chunk in response.content.iter_chunked(1024 * 1024):
-                                    await f.write(chunk)
-                                    bar.update(1024*1024)
+                            if pb:
+                                bar = tqdm(total=length)
+                            async for chunk in response.content.iter_chunked(chunk_size):
+                                await f.write(chunk)
+                                if pb:
+                                    bar.update(chunk_size)
+                                bar.close()
                         self.logger_success.info(
                             f'{index}, {url}, {human_size(length)}')
                     else:
@@ -98,14 +100,21 @@ class AsyncHTTP:
                  for index, url in enumerate(urls)]
         await asyncio.wait(tasks)
 
-    async def async_downloads(self, sem: int,  urls: Iterable[str], file_names: Iterable[str], headers: Dict[str, str] = None, proxy: str = None):
+    async def async_downloads(self, sem: int,  urls: Iterable[str], file_names: Iterable[str], headers: Dict[str, str] = None, proxy: str = None, pb: bool = True):
         """
         Asynchrounous download multiple urls
+
+        :param sem: Max concurrency count.
+        :param urls: Each of download url.
+        :param file_names: Each of url saved file name.
+        :param headers: Request headers.
+        :param proxy: Request proxy.
+        :param pb: Determine whether show progress bar
         """
         if len(urls) != len(file_names):
             raise ValueError(
                 f'urls and file_names must have same length, bug got {len(urls)} {len(file_names)}')
         semaphore = Semaphore(sem)
-        tasks = [self.async_download(index, semaphore, url, file_names[index], headers, proxy)
+        tasks = [self.async_download(index, semaphore, url, file_names[index], headers, proxy, pb=pb)
                  for index, url in enumerate(urls)]
         await asyncio.wait(tasks)
