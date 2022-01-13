@@ -33,8 +33,8 @@ def check_args(*args: str):
 
 if __name__ == '__main__':
     try:
-        opts, args = getopt(sys.argv[1:], "haxc",
-                            ["help", "account", "cookies", "category"])
+        opts, args = getopt(sys.argv[1:], "ha:x:c:",
+                            ["help", "account=", "cookies=", "category="])
     except GetoptError as err:
         print(err)
         sys.exit(2)
@@ -43,12 +43,12 @@ if __name__ == '__main__':
     cookies = COOKIES
     category = CATEGORY
     # env
-    if os.environ('ACCOUNT'):
-        account = os.environ('ACCOUNT')
-    if os.environ('COOKIES'):
-        cookies = os.environ('COOKIES')
-    if os.environ('CATEGORY'):
-        category = os.environ('CATEGORY')
+    if os.environ.get('ACCOUNT'):
+        account = os.environ.get('ACCOUNT')
+    if os.environ.get('COOKIES'):
+        cookies = os.environ.get('COOKIES')
+    if os.environ.get('CATEGORY'):
+        category = os.environ.get('CATEGORY')
     # arg
     for opt, arg in opts:
         if opt in ['-h', '--help']:
