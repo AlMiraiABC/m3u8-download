@@ -13,7 +13,7 @@ class M3U8:
     Download each segments of m3u8 file and combine theme as Transport Stream(MPEG2-TS)
     """
 
-    def __init__(self, m3u8_filename: str,  tmp_dir: str = 'tmp',log='./log', *args, **kwargs) -> None:
+    def __init__(self, m3u8_filename: str,  tmp_dir: str = 'tmp', log='./log', *args, **kwargs) -> None:
         """
         Create a :class:`M3U8` instance to download m3u8.
 
@@ -26,7 +26,8 @@ class M3U8:
         self.asynchttp = AsyncHTTP(*args, **kwargs)
         self.tmp_dir = tmp_dir
         self.m3u8_filename = m3u8_filename
-        self.logger = CFLogger('m3u8', '%(asctime)s:%(message)s', log_dir=log).logger
+        self.logger = CFLogger(
+            'm3u8', '%(asctime)s:%(message)s', log_dir=log).logger
 
     async def download_segs(self, base_url: str):
         """
@@ -37,17 +38,17 @@ class M3U8:
         fns = [f'{os.path.join(self.tmp_dir,seg)}' for seg in playlist.files]
         await self.asynchttp.async_downloads(4, urls, fns)
 
-    def combine_segs(self, output: str)->str:
+    def combine_segs(self, output: str) -> str:
         """
         combine m3u8 segment videos from :param:`segs_folder` to :param:`output`
         """
         playlist = m3u8.load(self.m3u8_filename)
         # file name too long exception, linux supported file name length is 255 bytes, but encoding utf-8 char is 1~4 bytes
-        if len(output.encode())>=200:
+        if len(output.encode()) >= 200:
             self.logger.info(f'filename too long to cut.')
-        f,e = os.path.splitext(os.path.basename(output))
+        f, e = os.path.splitext(os.path.basename(output))
         d = os.path.dirname(output)
-        o = os.path.join(d,f[:200-len(e)-1],e)
+        o = os.path.join(d, f[:200-len(e)-1]+e)
         self.logger.info(f"Save as {o} from {output}")
         with open(o, 'wb') as video:
             with tqdm(playlist.files) as bar:
