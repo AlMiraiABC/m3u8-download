@@ -1,4 +1,5 @@
 import os
+import threading
 
 from download.asynchttp import AsyncHTTP
 from tqdm import tqdm
@@ -42,6 +43,16 @@ class M3U8:
         """
         combine m3u8 segment videos from :param:`segs_folder` to :param:`output`
         """
+        def cb():
+            with open(o, 'wb') as video:
+                with tqdm(playlist.files) as bar:
+                    for seg in bar:
+                        bar.set_description(f"Combining {seg}")
+                        segpath = os.path.join(self.tmp_dir, seg)
+                        with open(segpath, 'rb') as temp:
+                            content = temp.read()
+                            video.write(content)
+                        os.remove(segpath)
         playlist = m3u8.load(self.m3u8_filename)
         # file name too long exception, linux supported file name length is 255 bytes, but encoding utf-8 char is 1~4 bytes
         if len(output.encode()) >= 200:
@@ -50,15 +61,8 @@ class M3U8:
         d = os.path.dirname(output)
         o = os.path.join(d, f[:200-len(e)-1]+e)
         self.logger.info(f"Save as {o} from {output}")
-        with open(o, 'wb') as video:
-            with tqdm(playlist.files) as bar:
-                for seg in bar:
-                    bar.set_description(f"Combining {seg}")
-                    segpath = os.path.join(self.tmp_dir, seg)
-                    with open(segpath, 'rb') as temp:
-                        content = temp.read()
-                        video.write(content)
-                    os.remove(segpath)
+        cb_thread = threading.Thread(target=cb)
+        cb_thread.start()
         return o
 
     @staticmethod
