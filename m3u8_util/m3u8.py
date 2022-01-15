@@ -59,7 +59,7 @@ class M3U8:
             self.logger.info(f'filename too long to cut.')
         f, e = os.path.splitext(os.path.basename(output))
         d = os.path.dirname(output)
-        o = os.path.join(d, f[:200-len(e)-1]+e)
+        o = os.path.join(d, f[:200/3-len(e)-1]+e) # utf-8 has 1~3 bytes
         self.logger.info(f"Save as {o} from {output}")
         cb_thread = threading.Thread(target=cb)
         cb_thread.start()
