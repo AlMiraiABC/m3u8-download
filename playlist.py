@@ -1,7 +1,7 @@
 import csv
 import os
 import shutil
-from typing import Dict
+from typing import Dict, List
 from urllib.parse import quote, urlencode
 
 import requests
@@ -37,8 +37,21 @@ class PlayList:
                     f"downloaded directory is not empty if you want to re-download.")
         self.downloaded_files = os.listdir(downloaded_dir) if c else []
 
-    def get_playlist(self, url: str, account: str, category: str, cookies: str, data: dict = {}, headers: Dict[str, str] = {}):
-        """Download playlist which belong to :param:`category`"""
+    def get_playlist(self, url: str, account: str, category: str, cookies: str, data: dict = {}, headers: Dict[str, str] = {}, force: bool = False):
+        """
+        Download playlist which belong to :param:`category`
+
+        :param url: URL which can get playlist, maybe named `videoPlay`
+        :param account: Loged in account
+        :param category: Category code.
+        :param cookies: Loged in coolies.
+        :param data: Request body. will merged in default data.
+        :param headers: Request headers. will merged in default headers.
+        :param force: Re-get this list if it already exists.
+        """
+        if not force and os.path.exists(self.save):
+            self.logger_success.warn(
+                f'play list {self.save} has been exists and will ignore to re-get it.')
         DATA = {
             "data": {
                 "account": account,
@@ -70,22 +83,31 @@ class PlayList:
         else:
             raise ConnectionError("Cannot get play list. Please try again.")
 
-    async def get_m3u8s(self, headers: Dict[str, str] = None, save_dir: str = 'm3u8'):
-        """Download m3u8 files that u get from :method:`get_playlist`"""
-        if headers is None:
-            headers = {
+    async def get_m3u8s(self, headers: Dict[str, str] = {}, save_dir: str = 'm3u8', force: bool = False):
+        """
+        Download m3u8 files that u get from :method:`get_playlist`
+
+        :param headers: Request headers, will merged in default headers.
+        :param save_dir: Directory path to save downloaded m3u8 files.
+        :param force: Determine whether re-download exists m3u8 file which found in :param:`save_dir`
+        """
+        HEADERS = {
                 "X-Requested-With": "XMLHttpRequest",
                 "Referer": "http://www--vipexam--cn--http.vipexam.hevttc.utuweb.utuedu.com:8089/",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36 Edg/96.0.1054.53"
             }
         PlayList.check_dir(save_dir)
+        pl: List[str] = []
+        if not force:
+            pl = os.listdir(save_dir)
+        headers = HEADERS.update(headers)
         with open(self.save, "r", encoding='utf-8') as f:
             reader = csv.reader(f)
-            li = list(reader)
+            li = [row for row in reader[1:] if row[6] not in pl]
             http = AsyncHTTP()
             urls = [
-                f"http://video.vipexam.net//vedio/{row[3]}/{row[4]}/index.m3u8" for row in li[1:]]
-            fns = [os.path.join(save_dir, f'{row[6]}.m3u8') for row in li[1:]]
+                f"http://video.vipexam.net//vedio/{row[3]}/{row[4]}/index.m3u8" for row in li]
+            fns = [os.path.join(save_dir, f'{row[6]}.m3u8') for row in li]
             await http.async_downloads(4, urls, fns, headers)
 
     async def download(self, save: str = 'ts', *args, **kwargs):
@@ -106,7 +128,8 @@ class PlayList:
                 base_url = f"http://video.vipexam.net//vedio/{parentCode}/{videoCode}/"
                 m3u8_filename = f'{order}.m3u8'
                 if m3u8_filename in self.downloaded_files:
-                    self.logger_success.warn(f'{m3u8_filename} founded in {self.downloaded_dir}, skip it.')
+                    self.logger_success.warn(
+                        f'{m3u8_filename} founded in {self.downloaded_dir}, skip it.')
                     continue
                 m3u8_filepath = os.path.join('./m3u8', m3u8_filename)
                 save_filepath = os.path.join(save, f'{video_name}.ts')
