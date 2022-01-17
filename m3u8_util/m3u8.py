@@ -61,8 +61,15 @@ class M3U8:
         d = os.path.dirname(output)
         o = os.path.join(d, f[:200//3-len(e)-1]+e) # utf-8 has 1~3 bytes
         self.logger.info(f"Save as {o} from {output}")
-        cb_thread = threading.Thread(target=cb)
-        cb_thread.start()
+        with open(o, 'wb') as video:
+            with tqdm(playlist.files) as bar:
+                for seg in bar:
+                    bar.set_description(f"Combining {seg}")
+                    segpath = os.path.join(self.tmp_dir, seg)
+                    with open(segpath, 'rb') as temp:
+                        content = temp.read()
+                        video.write(content)
+                    os.remove(segpath)
         return o
 
     @staticmethod
