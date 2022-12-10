@@ -1,5 +1,4 @@
 import os
-import threading
 
 from download.asynchttp import AsyncHTTP
 from tqdm import tqdm
