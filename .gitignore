@@ -1,8 +1,5 @@
-tmp/
-ts/
 log/
-downloaded/
-m3u8/
+data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

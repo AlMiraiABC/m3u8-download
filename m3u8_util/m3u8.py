@@ -1,7 +1,10 @@
 import asyncio
 import os
-from subprocess import PIPE, Popen
+import re
+import subprocess
+from typing import Literal
 
+from al_utils.async_util import async_wrap
 from al_utils.logger import Logger
 from tqdm import tqdm
 
@@ -9,6 +12,29 @@ import m3u8
 from download.asynchttp import AsyncHTTP
 
 logger = Logger(__file__).logger
+
+
+async def download(url: str, name: str, m3u8_dir="./m3u8", tmp_dir="./tmp", videos_dir: str = "./videos", headers: dict[str, str] = {}, mode: Literal['aio', 'ff'] = 'aio'):
+    """
+    download m3u8 video from url path.
+
+    :param url: page url.
+    :param name: video name.
+    :param m3u8_dir: directory to save m3u8 files.
+    :param tmp_dir: directory to save segments.
+    :param videos_dir: directory to save output videos.
+    :param mode: download mode.
+    """
+    [AioM3U8.check_dir(d) for d in [m3u8_dir, tmp_dir, videos_dir]]
+    if not url:
+        raise ValueError(f"m3u8 url must be set.")
+    m3u8_fn = os.path.join(m3u8_dir, name+".m3u8")
+    output_fn = os.path.join(videos_dir, name+".ts")
+    if mode == 'aio':
+        base_url = re.findall(r'(h.*/).*m3u8', url)[0]
+        return await AioM3U8.download(m3u8_fn, base_url, output_fn, url, tmp_dir, headers)
+    elif mode == 'ff':
+        return async_wrap(FFM3U8.download(url, output_fn))
 
 
 class FFM3U8:
@@ -20,25 +46,35 @@ class FFM3U8:
     """
 
     @staticmethod
-    def download(url: str, output: str, *options):
+    def download(url: str, output: str, headers: dict[str, str] = {},override:bool=True, *options:str):
         """
         download m3u8 url to :param:`output`
 
         :param url: m3u8 file url.
         :param output: saved video file name.
+        :param override: Determine whether override :param:`output` if exists.
         :param options: extra arguments when invoke ffmpeg.
         """
         if not url or not url.strip() or not url.lower().startswith('http'):
             raise ValueError("url must starts with http or https.")
         if not output:
             raise ValueError("please specified a output file name.")
-        with Popen(f"ffmpeg -i {url} {' '.join(options)} -c copy {output}", stdout=PIPE, stderr=PIPE, bufsize=1, text=True) as p:
-            if p.stderr is not None:
-                raise RuntimeError(p.stderr.readlines())
-            if p.stdout is not None:
-                for line in iter(p.stdout.readline, b''):
-                    logger.info(line)
+        h: str = ''
+        if headers:
+            h = "\\r\\n".join([f"{k}:{v}" for k, v in headers.items()])
+            options = (*options, '-headers', h)
+        if override:
+            options = (*options, '-y')
+        else:
+            options = (*options, '-n')
+        command = f"ffmpeg -i {url} -c copy {' '.join(options)} {output}"
+        logger.debug(command)
+        with subprocess.Popen(command) as p:
+            pass
+        if p.returncode != 0:
+            raise RuntimeError(f"Occurred return code {p.returncode} of {url}")
         return output
+
 
 class AioM3U8:
     """
