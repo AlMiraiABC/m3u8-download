@@ -54,7 +54,8 @@ class Resume:
                 return
             raise RuntimeError(f"Callback failed of key {key}")
         except:
-            _logger.error(f"callback failed of key {key}")
+            _logger.error(
+                f"callback failed of key {key}", exc_info=True, stack_info=True)
             self._failed.add(key)
             await self._ff.write(key+os.linesep)
 
