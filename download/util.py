@@ -5,3 +5,4 @@ def human_size(length: float) -> str:
         if (length / radix) < 1:
             return "%.2f%s" % (length, units[i])
         length = length / radix
+    return "%.2f%s" % (length, units[-1])
