@@ -28,21 +28,23 @@ class Resume:
         if not fn:
             return []
         # create if not exist
-        async with aiofiles.open(fn, 'w') as f:
+        async with aiofiles.open(fn, 'a') as f:
             pass
         async with aiofiles.open(fn) as f:
-            return await f.readlines()
+            return [r.strip() for r in await f.readlines()]
 
     async def run(self, key: str, callback: Callable[[str], Awaitable[bool]]):
         if self._bp or key in self._failed:
             return await self._run(key, callback)
         # skipped until current
-        if self._current:
-            if key != self._current:
-                _logger.info(f"callback skipped of key {key}")
-                return
-        else:
+        if not self._current:
             self._bp = True
+            return
+        if key == self._current:
+            self._bp = True
+            return
+        _logger.info(f"callback skipped of key {key}")
+        return
 
     async def _run(self, key: str, callback: Callable[[str], Awaitable[bool]]):
         try:
@@ -50,14 +52,14 @@ class Resume:
             if ret:
                 await self._set_current(key)
                 _logger.info(f"callback successfully of key {key}")
-                await self._sf.write(key+os.linesep)
+                await self._sf.write(key)
                 return
             raise RuntimeError(f"Callback failed of key {key}")
         except:
             _logger.error(
                 f"callback failed of key {key}", exc_info=True, stack_info=True)
             self._failed.add(key)
-            await self._ff.write(key+os.linesep)
+            await self._ff.write(key)
 
     async def __aenter__(self):
         if self._current:
@@ -76,5 +78,8 @@ class Resume:
         await self.close()
 
     async def close(self):
-        await self._ff.close()
-        await self._sf.close()
+        try:
+            await self._ff.close()
+            await self._sf.close()
+        except:
+            _logger.debug("closed failed", exc_info=True, stack_info=True)
