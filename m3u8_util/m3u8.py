@@ -4,17 +4,17 @@ import re
 import subprocess
 from typing import Literal
 
+import m3u8
 from al_utils.async_util import async_wrap
 from al_utils.logger import Logger
 from tqdm import tqdm
 
-import m3u8
 from download.asynchttp import AsyncHTTP
 
 logger = Logger(__file__).logger
 
 
-async def download(url: str, name: str, m3u8_dir="./m3u8", tmp_dir="./tmp", videos_dir: str = "./videos", headers: dict[str, str] = {}, mode: Literal['aio', 'ff'] = 'aio'):
+async def download(url: str, name: str, m3u8_dir="./m3u8", tmp_dir="./tmp", videos_dir: str = "./videos", headers: dict[str, str] = {}, mode: Literal['aio', 'ff'] = 'aio', retry: int = 3):
     """
     download m3u8 video from url path.
 
@@ -32,9 +32,9 @@ async def download(url: str, name: str, m3u8_dir="./m3u8", tmp_dir="./tmp", vide
     output_fn = os.path.join(videos_dir, name+".ts")
     if mode == 'aio':
         base_url = re.findall(r'(h.*/).*m3u8', url)[0]
-        return await AioM3U8.download(m3u8_fn, base_url, output_fn, url, tmp_dir, headers)
+        return await AioM3U8.download(m3u8_fn, base_url, output_fn, url, tmp_dir, headers, retry=retry)
     elif mode == 'ff':
-        return async_wrap(FFM3U8.download(url, output_fn))
+        return async_wrap(FFM3U8.download(url, output_fn, headers, True, retry))
 
 
 class FFM3U8:
@@ -46,20 +46,20 @@ class FFM3U8:
     """
 
     @staticmethod
-    def download(url: str, output: str, headers: dict[str, str] = {},override:bool=True, *options:str):
+    def download(url: str, output: str, headers: dict[str, str] = {}, override: bool = True, retry: int = 3, *options: str):
         """
         download m3u8 url to :param:`output`
 
         :param url: m3u8 file url.
         :param output: saved video file name.
         :param override: Determine whether override :param:`output` if exists.
+        :param retry: Retry times.
         :param options: extra arguments when invoke ffmpeg.
         """
         if not url or not url.strip() or not url.lower().startswith('http'):
             raise ValueError("url must starts with http or https.")
         if not output:
             raise ValueError("please specified a output file name.")
-        h: str = ''
         if headers:
             h = "\\r\\n".join([f"{k}:{v}" for k, v in headers.items()])
             options = (*options, '-headers', h)
@@ -67,13 +67,17 @@ class FFM3U8:
             options = (*options, '-y')
         else:
             options = (*options, '-n')
-        command = f"ffmpeg -i {url} -c copy {' '.join(options)} {output}"
-        logger.debug(command)
-        with subprocess.Popen(command) as p:
-            pass
-        if p.returncode != 0:
-            raise RuntimeError(f"Occurred return code {p.returncode} of {url}")
-        return output
+        for i in range(retry):
+            command = f"ffmpeg -i {url} -c copy {' '.join(options)} {output}"
+            logger.debug(command)
+            with subprocess.Popen(command) as p:
+                pass
+            if p.returncode != 0:
+                logger.error(f'{url}, {i}, {p.returncode}')
+                continue
+            logger.info(f'{url}, {p.returncode}')
+            return output
+        raise IOError(f'Download failed {url} in {retry} retries')
 
 
 class AioM3U8:
@@ -81,23 +85,25 @@ class AioM3U8:
     Download m3u8 video via aiohttp
     """
 
-    def __init__(self, m3u8_filename: str,  tmp_dir: str = 'tmp', headers: dict[str, str] = {}, *args, **kwargs) -> None:
+    def __init__(self, m3u8_filename: str,  tmp_dir: str = 'tmp', headers: dict[str, str] = {}, retry: int = 3) -> None:
         """
         Create a :class:`M3U8` instance to download m3u8.
 
         :param m3u8_filename: m3u8 file name which will be download to ts.
         :param m3u8_url: If not empty, will download it to :param:``meu8_filename``.
         :param tmp_dir: Directory to save segments.
-        :param log: Directory to save logs.
+        :param headers: Request headers.
+        :param retry: Retry times.
         """
         self.check_dir(tmp_dir)
-        self.asynchttp = AsyncHTTP(*args, **kwargs)
+        self.asynchttp = AsyncHTTP()
         self.tmp_dir = tmp_dir
         self.headers = headers
         self.m3u8_filename = m3u8_filename
+        self.retry = retry if retry or retry > 0 else 3
 
     async def download_m3u8(self, url: str):
-        await AsyncHTTP().async_download(0, asyncio.Semaphore(1), url, self.m3u8_filename, self.headers)
+        await self.asynchttp.async_download(0, asyncio.Semaphore(1), url, self.m3u8_filename, self.headers, retry=self.retry)
 
     async def download_segs(self, base_url: str):
         """
@@ -106,7 +112,7 @@ class AioM3U8:
         playlist = m3u8.load(self.m3u8_filename)
         urls = [f'{base_url}{seg}' for seg in playlist.files]
         fns = [f'{os.path.join(self.tmp_dir,seg)}' for seg in playlist.files]
-        await self.asynchttp.async_downloads(4, urls, fns, self.headers)
+        await self.asynchttp.async_downloads(4, urls, fns, self.headers, retry=self.retry)
 
     def combine_segs(self, output: str) -> str:
         """
