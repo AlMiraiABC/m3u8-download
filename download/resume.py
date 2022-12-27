@@ -8,13 +8,21 @@ _logger = Logger(__file__).logger
 
 
 class Resume:
-    def __init__(self, success_log: str = "./logs/downloaded.log", error_log: str = "./logs/errors.log", current_log: str = './logs/current.log', current: str = '') -> None:
+    def __init__(self, success_log: str = "./logs/downloaded.log", error_log: str = "./logs/errors.log", current_log: str = './logs/current.log', current: str = '', skips: list[str] = []) -> None:
+        """
+        :param success_log: File to log successed download keys.
+        :param error_log: File to log failed download keys. The values will be ignored if :param:`current_log` or :param:`current` is empty.
+        :param current_log: File to log the last success downloaded key.
+        :param current: Specified current key, it will override the value in :param:`current_log`.
+        :param skips: Keys to ignore/skip download.
+        """
         self._suc = success_log
         self._err = error_log
         self._cur = current_log
         self._current = current
         self._failed: set[str] = set()
         self._bp: bool = False
+        self._skips = skips
 
     async def _set_current(self, cur: str):
         async with aiofiles.open(self._cur, 'w', encoding='utf-8') as f:
@@ -34,7 +42,10 @@ class Resume:
             return [r.strip() for r in await f.readlines()]
 
     async def run(self, key: str, callback: Callable[[str], Awaitable[bool]]):
-        if self._bp or key in self._failed:
+        if key in self._skips:
+            _logger.info(f"callback skipped by user of key {key}")
+            return
+        if self._bp or key in self._failed or key:
             return await self._run(key, callback)
         # skipped until current
         if not self._current:
