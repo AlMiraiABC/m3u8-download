@@ -10,11 +10,12 @@ from al_utils.logger import Logger
 from tqdm import tqdm
 
 from download.asynchttp import AsyncHTTP
+from download.util import format_fn
 
 logger = Logger(__file__).logger
 
 
-async def download(url: str, name: str, m3u8_dir="./m3u8", tmp_dir="./tmp", videos_dir: str = "./videos", headers: dict[str, str] = {}, mode: Literal['aio', 'ff'] = 'aio', retry: int = 3):
+async def download(url: str, name: str, m3u8_dir="./m3u8", tmp_dir="./tmp", videos_dir: str = "./videos", headers: dict[str, str] = {}, mode: Literal['aio', 'ff'] = 'aio', override: bool = True, retry: int = 3):
     """
     download m3u8 video from url path.
 
@@ -24,17 +25,25 @@ async def download(url: str, name: str, m3u8_dir="./m3u8", tmp_dir="./tmp", vide
     :param tmp_dir: directory to save segments.
     :param videos_dir: directory to save output videos.
     :param mode: download mode.
+    :param override: determine whether re-download if file has exists.
+    :param retry: retry times when network error.
+    :return: First item is saved filename. Second item is whether download(True: download, False: skip)
     """
     [AioM3U8.check_dir(d) for d in [m3u8_dir, tmp_dir, videos_dir]]
     if not url:
         raise ValueError(f"m3u8 url must be set.")
     m3u8_fn = os.path.join(m3u8_dir, name+".m3u8")
+    m3u8_fn = format_fn(m3u8_fn)
     output_fn = os.path.join(videos_dir, name+".ts")
+    if os.path.exists(output_fn) and not override:
+        logger.info(f'Skip download {name} from {url} because {output_fn} exists and not override.')
+        return output_fn, False
     if mode == 'aio':
         base_url = re.findall(r'(h.*/).*m3u8', url)[0]
-        return await AioM3U8.download(m3u8_fn, base_url, output_fn, url, tmp_dir, headers, retry=retry)
+        await AioM3U8.download(m3u8_fn, base_url, output_fn, url, tmp_dir, headers, retry=retry)
     elif mode == 'ff':
-        return async_wrap(FFM3U8.download(url, output_fn, headers, True, retry))
+        async_wrap(FFM3U8.download(url, output_fn, headers, True, retry))
+    return output_fn, True
 
 
 class FFM3U8:
@@ -114,19 +123,12 @@ class AioM3U8:
         fns = [f'{os.path.join(self.tmp_dir,seg)}' for seg in playlist.files]
         await self.asynchttp.async_downloads(4, urls, fns, self.headers, retry=self.retry)
 
-    def combine_segs(self, output: str) -> str:
+    def combine_segs(self, output: str):
         """
         combine m3u8 segment videos from :param:`segs_folder` to :param:`output`
         """
         playlist = m3u8.load(self.m3u8_filename)
-        # file name too long exception, linux supported file name length is 255 bytes, but encoding utf-8 char is 1~4 bytes
-        if len(output.encode()) >= 200:
-            logger.info(f'filename too long to cut.')
-        f, e = os.path.splitext(os.path.basename(output))
-        d = os.path.dirname(output)
-        o = os.path.join(d, f[:200//3-len(e)-1]+e)  # utf-8 has 1~3 bytes
-        logger.info(f"Save as {o} from {output}")
-        with open(o, 'wb') as video:
+        with open(output, 'wb') as video:
             with tqdm(playlist.files) as bar:
                 for seg in bar:
                     bar.set_description(f"Combining {seg}")
@@ -135,7 +137,6 @@ class AioM3U8:
                         content = temp.read()
                         video.write(content)
                     os.remove(segpath)
-        return o
 
     @staticmethod
     async def download(m3u8_fn: str, base_url: str, output_fn: str, m3u8_url: str = '', tmp_dir: str = 'tmp', headers: dict[str, str] = {}, *args, **kwargs):
@@ -157,7 +158,7 @@ class AioM3U8:
             logger.info(
                 f"successfully download m3u8 file {m3u8_fn} from {m3u8_url}.")
         await md.download_segs(base_url)
-        return md.combine_segs(output_fn)
+        md.combine_segs(output_fn)
 
     @staticmethod
     def check_dir(dir: str, create: bool = True, throw: bool = True) -> bool:

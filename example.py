@@ -36,16 +36,19 @@ async def get_m3u8_url(url: str, headers: dict[str, str] = {}):
 async def main():
     BASE_URL = "https://91md.me"
 
-    async def callback(link: str, name: str):
+    async def callback(link: str, name: str, rs_check_fn:bool):
         try:
             url = await get_m3u8_url(link)
             if not url:
                 raise ValueError(f"cannot get m3u8 url from {link}")
-            fn: str = str(await download(url, name, M3U8_FILE_DIR, TMP_DIR, M3U8_VIDEO_DIR, HEADERS, MODE))
-            logger.info(
-                f'download video {name} successfully to {fn} from {url}')
-            ColoredConsole.success(
-                f"Download successfully of {name} to {fn} from {link}")
+            fn,d = await download(url, name, M3U8_FILE_DIR, TMP_DIR, M3U8_VIDEO_DIR, HEADERS, MODE, not rs_check_fn)
+            if d:
+                logger.info(
+                    f'download video {name} successfully to {fn} from {url}')
+                ColoredConsole.success(
+                    f"Download successfully of {name} to {fn} from {link}")
+            else:
+                ColoredConsole.debug(f"Skip download {name} from {url}, file {fn} exists")
             return True
         except:
             ColoredConsole.error(f"Download failed of {name} from {link}.")
@@ -56,7 +59,7 @@ async def main():
         async with Resume() as resume:
             for name, _, link in rows:
                 link = f"{BASE_URL}{link}"
-                await resume.run(link, lambda _: callback(link, name))
+                await resume.run(link, lambda _: callback(link, name, RS_CHECK_FN))
 
 if __name__ == "__main__":
     m = main()
